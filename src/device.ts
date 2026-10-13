@@ -39,6 +39,8 @@ export interface DeviceSnapshot<S> {
 
 const POLL_MS = 15000;
 const ENFORCE_INTERVAL_MS = 10000;
+// Reads in a row the device answers with an error before it is shown as not responding.
+const READ_FAILURES = 3;
 const KEPT = ['buzzer', 'light'] as const;
 type KeptKey = (typeof KEPT)[number];
 const SILENT: DeviceLog = { info: () => undefined, warn: () => undefined, debug: () => undefined };
@@ -71,8 +73,10 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
   private tasks = 0;
   /** Writes queued or running. */
   private writes = 0;
-  /** Goes up when the device stops answering. A write queued before that is not sent. */
+  /** Goes up when the device is lost. A write queued before that is not sent. */
   private epoch = 0;
+  /** Reads in a row the device answered with an error. */
+  private readErrors = 0;
   private readQueued = false;
   private pollTimer?: NodeJS.Timeout;
   private stopped = false;
@@ -218,19 +222,18 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       } finally {
         this.writes -= 1;
       }
-      if (this.writes > 0 || this.online === false) {
+      if (this.writes > 0) {
         return;
       }
-      if (sent) {
+      if (sent && this.online !== false) {
         // A write reply carries no state. It is read back once the last queued write is done,
         // or when what keeps the device busy ends.
         if (!this.busy()) {
           await this.read();
         }
       } else {
-        // Nothing was written, so what was last read stands.
-        this.pending = {};
-        this.emit();
+        // Nothing was written, or the device is not read: what was last read stands.
+        this.forget();
       }
     });
   }
@@ -255,10 +258,10 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
     try {
       state = await this.model.read(this.client);
     } catch (error) {
-      this.failed('read', error);
-      // Nothing confirms what was asked for. What the device accepted is in confirmed already.
-      if (this.writes === 0) {
-        this.forget();
+      if (error instanceof MiioTimeoutError) {
+        this.failed('read', error);
+      } else {
+        this.unreadable(error);
       }
       return;
     }
@@ -266,6 +269,7 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       this.log.info(`${this.noun} answers again`);
     }
     this.online = true;
+    this.readErrors = 0;
     this.confirmed = state;
     this.log.debug(`read: ${JSON.stringify(state)}`);
     // With a write still queued this reading is older than what was asked for.
@@ -294,6 +298,30 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
           : `no reply from ${this.noun}`,
       );
     }
+    this.lost();
+  }
+
+  // A read the device answered, but not with its state.
+  private unreadable(error: unknown): void {
+    if (this.stopped) {
+      return;
+    }
+    this.readErrors += 1;
+    // Said at the first one, not again on every poll while they go on.
+    if (this.readErrors === 1) {
+      this.log.warn(`read failed: ${describe(error)}`);
+    }
+    if (this.readErrors === READ_FAILURES && this.online !== false) {
+      this.log.warn(`${this.noun} cannot be read: shown as not responding`);
+      this.lost();
+    } else if (this.writes === 0) {
+      // Nothing confirms what was asked for. What the device accepted is in confirmed already.
+      this.forget();
+    }
+  }
+
+  // The device stopped answering or cannot be read: it is shown as not responding from here on.
+  private lost(): void {
     this.online = false;
     this.epoch += 1;
     // The writes that were asked for did not happen.

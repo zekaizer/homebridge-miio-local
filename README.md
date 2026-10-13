@@ -79,7 +79,8 @@ range (about 18 to 22 s), and turning one on turns the other off. A move turns o
 first.
 
 A control shows its new value at once. If the fan does not take it, the control goes back to
-what the fan has. A fan that stops answering is shown as *No Response*.
+what the fan has. A fan that stops answering, or that answers three reads in a row with an
+error, is shown as *No Response*.
 
 Natural wind, the oscillation angle and the timer are not exposed. A fan in natural wind stays
 in it when the speed changes.

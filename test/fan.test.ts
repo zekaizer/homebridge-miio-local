@@ -213,5 +213,58 @@ describe.each(MODELS)('fan: %s', (name) => {
       expect(rig.real.level).toBe(60);
       expect(rig.fan.snapshot.state?.level).toBe(60);
     });
+
+    const polls = async (count: number): Promise<void> => {
+      for (let i = 0; i < count; i += 1) {
+        rig.fan.refresh();
+        await rig.fan.idle();
+      }
+    };
+
+    it('is shown as not responding after three such reads in a row, and says so once', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      await polls(2);
+      expect(rig.fan.snapshot.online).toBe(true);
+      await polls(3);
+      expect(rig.fan.snapshot).toMatchObject({ online: false, state: { level: 25 } });
+      expect(rig.log.matching(/warn read failed: -9999/)).toHaveLength(1);
+      expect(rig.log.matching(/warn the fan cannot be read/)).toHaveLength(1);
+    });
+
+    it('counts from the start again after a read that works', async () => {
+      rig = await (await Rig.create(name)).started();
+      const read = rig.model.read;
+      rig.model.read = refuse;
+      await polls(2);
+      rig.model.read = read;
+      await polls(1);
+      rig.model.read = refuse;
+      await polls(2);
+      expect(rig.fan.snapshot.online).toBe(true);
+      expect(rig.log.matching(/warn read failed: -9999/)).toHaveLength(2);
+    });
+
+    it('is shown again once a read works', async () => {
+      rig = await (await Rig.create(name)).started();
+      const read = rig.model.read;
+      rig.model.read = refuse;
+      await polls(3);
+      rig.model.read = read;
+      rig.atTheFan.level(70);
+      await polls(1);
+      expect(rig.fan.snapshot).toMatchObject({ online: true, state: { level: 70 } });
+      expect(rig.log.matching(/info .*answers again/)).toHaveLength(1);
+    });
+
+    it('does not show a value it refuses while it is not responding', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      await polls(3);
+      rig.model.setPower = refuse;
+      rig.fan.setPower(false);
+      await rig.fan.idle();
+      expect(rig.fan.snapshot).toMatchObject({ online: false, state: { power: true } });
+    });
   });
 });
