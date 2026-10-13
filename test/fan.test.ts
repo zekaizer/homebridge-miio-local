@@ -74,6 +74,16 @@ describe.each(MODELS)('fan: %s', (name) => {
       expect(rig.writes).toHaveLength(1);
     });
 
+    it('ends on at a speed that is asked for after the fan was told to turn off', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.fan.setLevel(40);
+      rig.fan.setPower(false);
+      rig.fan.setLevel(20);
+      await rig.fan.idle();
+      expect(rig.real).toMatchObject({ power: true, level: 20 });
+      expect(rig.fan.snapshot.state).toMatchObject({ power: true, level: 20 });
+    });
+
     it('never shows the old speed again while a write is on its way', async () => {
       rig = await (await Rig.create(name)).started();
       rig.fan.refresh();
