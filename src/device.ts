@@ -171,6 +171,15 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
     }
   }
 
+  /** Stops showing what was asked for and not confirmed. */
+  private forget(): void {
+    if (this.stopped || Object.keys(this.pending).length === 0) {
+      return;
+    }
+    this.pending = {};
+    this.emit();
+  }
+
   protected run(task: () => Promise<void>): void {
     this.tasks += 1;
     this.queue = this.queue
@@ -247,6 +256,10 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       state = await this.model.read(this.client);
     } catch (error) {
       this.failed('read', error);
+      // Nothing confirms what was asked for. What the device accepted is in confirmed already.
+      if (this.writes === 0) {
+        this.forget();
+      }
       return;
     }
     if (this.online === false) {

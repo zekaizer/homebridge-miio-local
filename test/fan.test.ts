@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { MiioError } from '../src/miio/client';
 import { MODELS, Rig } from './support/fan-rig';
 
 describe.each(MODELS)('fan: %s', (name) => {
@@ -184,6 +185,33 @@ describe.each(MODELS)('fan: %s', (name) => {
       // One request sent three times: first with the handshake it had, then after two new ones.
       expect(rig.device.hellos - before).toBe(2);
       expect(rig.fan.snapshot).toMatchObject({ online: false, state: { level: 25, lock: false } });
+    });
+  });
+
+  // dmaker.fan.p33 answers -9999 to a request it cannot service.
+  describe('a fan that answers a read with an error', () => {
+    const refuse = async (): Promise<never> => {
+      throw new MiioError(-9999, 'user ack timeout');
+    };
+
+    it('shows what it last read when it refuses a value and cannot be read back', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.setPower = refuse;
+      rig.model.read = refuse;
+      rig.fan.setPower(false);
+      expect(rig.fan.snapshot.state?.power).toBe(false);
+      await rig.fan.idle();
+      expect(rig.fan.snapshot.state?.power).toBe(true);
+      expect(rig.seen.at(-1)?.state?.power).toBe(true);
+    });
+
+    it('keeps showing a value it took when it cannot be read back', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      rig.fan.setLevel(60);
+      await rig.fan.idle();
+      expect(rig.real.level).toBe(60);
+      expect(rig.fan.snapshot.state?.level).toBe(60);
     });
   });
 });
