@@ -254,6 +254,9 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
   }
 
   protected async read(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
     let state: S;
     try {
       state = await this.model.read(this.client);
@@ -263,6 +266,10 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       } else {
         this.unreadable(error);
       }
+      return;
+    }
+    // Stopped while the device was answering.
+    if (this.stopped) {
       return;
     }
     if (this.online === false) {

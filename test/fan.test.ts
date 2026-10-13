@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MiioError } from '../src/miio/client';
 import { MODELS, Rig } from './support/fan-rig';
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 describe.each(MODELS)('fan: %s', (name) => {
   let rig: Rig;
 
@@ -185,6 +187,33 @@ describe.each(MODELS)('fan: %s', (name) => {
       // One request sent three times: first with the handshake it had, then after two new ones.
       expect(rig.device.hellos - before).toBe(2);
       expect(rig.fan.snapshot).toMatchObject({ online: false, state: { level: 25, lock: false } });
+    });
+  });
+
+  describe('a fan that is stopped while a request is on its way', () => {
+    it('reports nothing of the reply', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.device.delayMs = 20;
+      rig.atTheFan.level(80);
+      rig.fan.refresh();
+      await sleep(5);
+      const seen = rig.seen.length;
+      rig.fan.stop();
+      await sleep(60);
+      expect(rig.seen).toHaveLength(seen);
+      expect(rig.fan.snapshot.state?.level).toBe(25);
+    });
+
+    it('does not read back the write', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.device.delayMs = 20;
+      rig.fan.setLock(true);
+      await sleep(5);
+      const reads = rig.reads;
+      rig.fan.stop();
+      await sleep(80);
+      expect(rig.real.lock).toBe(true);
+      expect(rig.reads).toBe(reads);
     });
   });
 
