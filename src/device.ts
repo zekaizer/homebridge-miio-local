@@ -338,14 +338,14 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
 
   private keep(state: S): void {
     const night = this.isNight();
-    this.trackNight(state, night);
+    const back = this.trackNight(state, night);
     const off = KEPT.filter((key) => {
       const wanted = this.wanted(key, night);
       return wanted !== undefined && state[key] !== wanted;
     });
     // Not more often than enforceIntervalMs: the read after the write comes back at once, and a
     // device that refuses the value would be written to in a loop.
-    if (off.length === 0 || Date.now() - this.keptAt < this.enforceIntervalMs) {
+    if (off.length + back.length === 0 || Date.now() - this.keptAt < this.enforceIntervalMs) {
       return;
     }
     this.keptAt = Date.now();
@@ -354,11 +354,17 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       this.log.info(`keeping the ${key} ${value ? 'on' : 'off'}`);
       this.writeKept(key, value);
     }
+    for (const [key, value] of back) {
+      this.log.info(`the night is over: putting the ${key} back ${value ? 'on' : 'off'}`);
+      this.writeKept(key, value);
+    }
   }
 
   // While it is night, remembers what the device had for each setting the night overrides and
-  // no day value would put back. Those are written back when the night ends.
-  private trackNight(state: S, night: boolean): void {
+  // no day value would put back. Returns what is to be written back now that the night is over.
+  // What was remembered is forgotten once the device has it all back, not when it is written: a
+  // write can fail.
+  private trackNight(state: S, night: boolean): Array<[KeptKey, boolean]> {
     const before = this.memory.beforeNight;
     if (night) {
       const added = KEPT.filter(
@@ -374,20 +380,22 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
         };
         this.onMemoryChange();
       }
-      return;
+      return [];
     }
     if (!before) {
-      return;
+      return [];
     }
-    delete this.memory.beforeNight;
-    this.onMemoryChange();
-    for (const key of KEPT) {
+    const back = KEPT.flatMap((key): Array<[KeptKey, boolean]> => {
       const value = before[key];
-      if (value !== undefined && this.day[key] === 'unmanaged' && state[key] !== value) {
-        this.log.info(`the night is over: putting the ${key} back ${value ? 'on' : 'off'}`);
-        this.writeKept(key, value);
-      }
+      return value !== undefined && this.day[key] === 'unmanaged' && state[key] !== value
+        ? [[key, value]]
+        : [];
+    });
+    if (back.length === 0) {
+      delete this.memory.beforeNight;
+      this.onMemoryChange();
     }
+    return back;
   }
 
   private writeKept(key: KeptKey, value: boolean): void {
