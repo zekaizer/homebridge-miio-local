@@ -105,6 +105,24 @@ describe('config', () => {
     expect(warnings[0]).toMatch(/night/);
   });
 
+  it.each([
+    ['an empty object', {}],
+    ['empty times', { start: '', end: ' ' }],
+  ])('takes a night left empty as no night, and says nothing: %s', (_, night) => {
+    const { config, warnings } = parse({ night, devices: [] });
+    expect(config.night).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
+  it.each([
+    ['only a start', { start: '22:00' }],
+    ['not an object', '22:00-07:00'],
+  ])('says so for a night that is half there or something else: %s', (_, night) => {
+    const { config, warnings } = parse({ night, devices: [] });
+    expect(config.night).toBeUndefined();
+    expect(warnings[0]).toMatch(/night/);
+  });
+
   it('has no devices when none are configured', () => {
     expect(parse({}).config.devices).toEqual([]);
     expect(parse(undefined).config.devices).toEqual([]);

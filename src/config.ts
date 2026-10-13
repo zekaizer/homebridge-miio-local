@@ -94,6 +94,10 @@ function parseNight(raw: unknown, warn: (message: string) => void): NightSchedul
     return undefined;
   }
   const { start, end } = raw as { start?: unknown; end?: unknown };
+  // Left empty: no night, as the schema says.
+  if (typeof raw === 'object' && !text(start) && !text(end)) {
+    return undefined;
+  }
   if (!TIME.test(text(start)) || !TIME.test(text(end))) {
     warn('night: start and end must be times of day such as 22:00; night values are not used');
     return undefined;
