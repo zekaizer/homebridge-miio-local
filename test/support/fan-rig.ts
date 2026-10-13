@@ -2,7 +2,7 @@ import type { DeviceLog } from '../../src/device';
 import { Fan, type FanOptions, type FanSnapshot } from '../../src/fan';
 import { MiioClient } from '../../src/miio/client';
 import { type FanModel, fanModel } from '../../src/models';
-import { FAKE_TOKEN, FakeDevice, type FakeModel } from './fake-device';
+import { ANSWER_TIMEOUT_MS, FAKE_TOKEN, FakeDevice, type FakeModel } from './fake-device';
 
 export class Log implements DeviceLog {
   readonly lines: string[] = [];
@@ -13,6 +13,11 @@ export class Log implements DeviceLog {
   matching(pattern: RegExp): string[] {
     return this.lines.filter((line) => pattern.test(line));
   }
+}
+
+export interface RigOptions extends FanOptions {
+  /** How long the client waits for a reply. */
+  timeoutMs?: number;
 }
 
 // A fake device, a client and a fan around them.
@@ -30,7 +35,7 @@ export class Rig {
 
   static async create(
     name: FakeModel,
-    options: FanOptions = {},
+    options: RigOptions = {},
     model: Partial<FanModel> = {},
   ): Promise<Rig> {
     const rig = new Rig(await FakeDevice.start(name), {
@@ -42,14 +47,14 @@ export class Rig {
   }
 
   /** Replaces the fan, as a restart of the plugin does. */
-  newFan(options: FanOptions = {}): Fan {
+  newFan({ timeoutMs = ANSWER_TIMEOUT_MS, ...options }: RigOptions = {}): Fan {
     this.fan?.stop();
     this.client?.close();
     this.client = new MiioClient({
       address: this.device.address,
       port: this.device.port,
       token: FAKE_TOKEN,
-      timeoutMs: 40,
+      timeoutMs,
     });
     this.fan = new Fan(this.client, this.model, {
       pollMs: 60_000,

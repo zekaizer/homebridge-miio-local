@@ -3,6 +3,7 @@ import { HomebridgeAPI } from 'homebridge/lib/api';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { FanAccessory, type FanAccessoryOptions } from '../src/fan-accessory';
+import { SILENCE_TIMEOUT_MS } from './support/fake-device';
 import { MODELS, Rig } from './support/fan-rig';
 
 const api = new HomebridgeAPI();
@@ -22,8 +23,12 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
     });
   };
 
-  async function setup(options: Partial<FanAccessoryOptions> = {}, off = false): Promise<void> {
-    rig = await Rig.create(name);
+  async function setup(
+    options: Partial<FanAccessoryOptions> = {},
+    off = false,
+    timeoutMs?: number,
+  ): Promise<void> {
+    rig = await Rig.create(name, { timeoutMs });
     rig.atTheFan.power(!off);
     accessory = new api.platformAccessory('Fan', api.hap.uuid.generate(name));
     attach(options);
@@ -200,7 +205,7 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
   });
 
   it('answers "no response" while the fan does not answer, and recovers', async () => {
-    await setup();
+    await setup({}, false, SILENCE_TIMEOUT_MS);
     const active = fanService().getCharacteristic(C.Active);
     await expect(active.handleGetRequest()).resolves.toBe(C.Active.ACTIVE);
     rig.device.silent = true;

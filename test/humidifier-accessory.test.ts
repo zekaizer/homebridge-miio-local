@@ -6,7 +6,12 @@ import { Humidifier } from '../src/humidifier';
 import { HumidifierAccessory } from '../src/humidifier-accessory';
 import { MiioClient } from '../src/miio/client';
 import { type HumidifierModel, humidifierModel } from '../src/models';
-import { FAKE_TOKEN, FakeDevice } from './support/fake-device';
+import {
+  ANSWER_TIMEOUT_MS,
+  FAKE_TOKEN,
+  FakeDevice,
+  SILENCE_TIMEOUT_MS,
+} from './support/fake-device';
 
 const api = new HomebridgeAPI();
 const { Service: S, Characteristic: C, HAPStatus } = api.hap;
@@ -19,14 +24,17 @@ describe('humidifier accessory', () => {
   let humidifier: Humidifier;
   let accessory: PlatformAccessory;
 
-  async function setup(at: Record<string, boolean | number> = {}): Promise<void> {
+  async function setup(
+    at: Record<string, boolean | number> = {},
+    timeoutMs = ANSWER_TIMEOUT_MS,
+  ): Promise<void> {
     device = await FakeDevice.start('zhimi.humidifier.ca4');
     Object.assign(device.humidifier, at);
     client = new MiioClient({
       address: device.address,
       port: device.port,
       token: FAKE_TOKEN,
-      timeoutMs: 40,
+      timeoutMs,
     });
     humidifier = new Humidifier(
       client,
@@ -186,7 +194,7 @@ describe('humidifier accessory', () => {
   });
 
   it('answers "no response" while the humidifier does not answer, and recovers', async () => {
-    await setup();
+    await setup({}, SILENCE_TIMEOUT_MS);
     const active = service().getCharacteristic(C.Active);
     device.silent = true;
     humidifier.refresh();

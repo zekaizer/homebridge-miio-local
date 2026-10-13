@@ -4,7 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MiioLocalPlatform, type Tuning } from '../src/platform';
 import { PLATFORM_NAME, PLUGIN_NAME } from '../src/settings';
-import { FAKE_TOKEN, FakeDevice, type FakeModel } from './support/fake-device';
+import {
+  ANSWER_TIMEOUT_MS,
+  FAKE_TOKEN,
+  FakeDevice,
+  type FakeModel,
+  SILENCE_TIMEOUT_MS,
+} from './support/fake-device';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -55,7 +61,7 @@ class Home {
       log,
       { platform: PLATFORM_NAME, ...config } as PlatformConfig,
       this.api,
-      { timeoutMs: 40, identifyRetryMs: 20, ...tuning },
+      { timeoutMs: ANSWER_TIMEOUT_MS, identifyRetryMs: 20, ...tuning },
     );
     for (const accessory of cached) {
       platform.configureAccessory(accessory);
@@ -145,8 +151,9 @@ describe('platform', () => {
     const h = home();
     const device = await h.device('zhimi.fan.za1');
     device.silent = true;
-    h.launch({ devices: [h.entry(device)] });
-    await sleep(400);
+    h.launch({ devices: [h.entry(device)] }, [], { timeoutMs: SILENCE_TIMEOUT_MS });
+    // Two tries, each of three requests.
+    await sleep(2 * 3 * SILENCE_TIMEOUT_MS + 100);
     expect(h.registered).toEqual([]);
     expect(h.lines.filter((line) => /warn Bedroom fan: .*no reply/.test(line))).toHaveLength(1);
     device.silent = false;
@@ -228,7 +235,7 @@ describe('platform', () => {
       const device = await FakeDevice.start('dmaker.fan.p33');
       const accessory = await kept(h, device);
       device.silent = true;
-      h.launch({ devices: [h.entry(device)] }, [accessory]);
+      h.launch({ devices: [h.entry(device)] }, [accessory], { timeoutMs: SILENCE_TIMEOUT_MS });
       const active = accessory.getService(S.Fanv2)?.getCharacteristic(C.Active);
       await until(() => h.lines.some((line) => /warn Bedroom fan: no reply/.test(line)), 'offline');
       await expect(active?.handleGetRequest()).rejects.toBe(

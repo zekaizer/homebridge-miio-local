@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { SILENCE_TIMEOUT_MS } from './support/fake-device';
 import { MODELS, Rig } from './support/fan-rig';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -151,7 +152,7 @@ describe.each(MODELS)('fan jog: %s', (name) => {
   });
 
   it('ends the jog when a step gets no reply, and does not send that step again', async () => {
-    rig = await (await Rig.create(name)).started();
+    rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
     rig.fan.startJog('left');
     rig.device.dropReplies = 1;
     await rig.fan.idle();
@@ -174,7 +175,7 @@ describe.each(MODELS)('fan jog: %s', (name) => {
   });
 
   it('ends the jog when the fan stops answering', async () => {
-    rig = await (await Rig.create(name)).started();
+    rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
     rig.fan.startJog('left');
     await sleep(25);
     rig.device.silent = true;

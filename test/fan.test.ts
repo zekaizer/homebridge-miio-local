@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MiioError } from '../src/miio/client';
+import { SILENCE_TIMEOUT_MS } from './support/fake-device';
 import { MODELS, Rig } from './support/fan-rig';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -144,7 +145,7 @@ describe.each(MODELS)('fan: %s', (name) => {
 
   describe('a fan that stops answering', () => {
     it('goes offline, says so once, and shows the last state it read', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.silent = true;
       rig.fan.setLevel(80);
       expect(rig.fan.snapshot.state?.level).toBe(80);
@@ -156,7 +157,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('comes back online when the fan answers again', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.silent = true;
       rig.fan.refresh();
       await rig.fan.idle();
@@ -169,7 +170,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('points at the token when the fan answers the handshake only', async () => {
-      rig = await Rig.create(name);
+      rig = await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS });
       rig.device.dropRequests = true;
       await rig.started();
       expect(rig.fan.snapshot.online).toBe(false);
@@ -177,7 +178,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('drops the commands that were waiting, instead of timing out on each', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.dropRequests = true;
       const before = rig.device.hellos;
       rig.fan.setLevel(80);
