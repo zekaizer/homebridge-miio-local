@@ -26,6 +26,8 @@ const MOVES: Array<[Direction, string]> = [
 export class FanAccessory {
   private readonly service: Service;
   private readonly switches = new Map<Direction, Service>();
+  /** The power and the speed of the write request being handed over. */
+  private asked?: { on?: boolean; speed?: number };
 
   constructor(
     private readonly hap: HAP,
@@ -55,17 +57,11 @@ export class FanAccessory {
         }
         return state?.power ? C.Active.ACTIVE : C.Active.INACTIVE;
       })
-      .onSet((value) => {
-        const on = value === C.Active.ACTIVE;
-        // HomeKit sends the power along with a speed. The speed has turned the fan on already.
-        if (this.fan.snapshot.state?.power !== on) {
-          this.fan.setPower(on);
-        }
-      });
+      .onSet((value) => this.ask({ on: value === C.Active.ACTIVE }));
     this.service
       .getCharacteristic(C.RotationSpeed)
       .setProps({ minValue: 0, maxValue: 100, minStep: 1 })
-      .onSet((value) => this.fan.setLevel(value as number));
+      .onSet((value) => this.ask({ speed: value as number }));
     this.service
       .getCharacteristic(C.SwingMode)
       .onSet((value) => this.fan.setOscillation(value === C.SwingMode.SWING_ENABLED));
@@ -99,6 +95,34 @@ export class FanAccessory {
 
     fan.onChange((snapshot) => this.show(snapshot));
     this.show(fan.snapshot);
+  }
+
+  // The power and the speed of one write request are decided on together, in either order: a
+  // request that turns the fan off can carry a speed, and alone that speed would turn the fan on.
+  // hap-nodejs hands over every value of a request in one turn of the event loop.
+  private ask(change: { on?: boolean; speed?: number }): void {
+    if (!this.asked) {
+      this.asked = {};
+      setImmediate(() => this.decide());
+    }
+    Object.assign(this.asked, change);
+  }
+
+  private decide(): void {
+    const { on, speed } = this.asked ?? {};
+    this.asked = undefined;
+    const power = this.fan.snapshot.state?.power;
+    if (on === false || (on === undefined && speed === 0)) {
+      if (power !== false) {
+        this.fan.setPower(false);
+      }
+    } else if (speed) {
+      this.fan.setLevel(speed);
+    } else if (power !== true) {
+      this.fan.setPower(true);
+    }
+    // HomeKit holds the speed it wrote. Without a write to the fan nothing puts back the real one.
+    this.show(this.fan.snapshot);
   }
 
   private show({ online, state, jog }: FanSnapshot): void {

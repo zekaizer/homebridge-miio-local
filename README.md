@@ -68,7 +68,7 @@ One accessory per fan:
 | Control | Notes |
 |---|---|
 | Power | |
-| Speed | 1-100 %. Setting a speed turns the fan on |
+| Speed | 1-100 %. Setting a speed turns the fan on, unless the same request turns it off |
 | Oscillation | Ignored while the fan is off |
 | Child lock | |
 | *Move Left*, *Move Right* switches | The head keeps turning, one step every 0.75 s, while the switch is on |

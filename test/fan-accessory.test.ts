@@ -39,14 +39,23 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
     accessory.getServiceById(S.Switch, `move-${direction}`);
   const value = (service: Service, characteristic: WithUUID<new () => Characteristic>): unknown =>
     service.getCharacteristic(characteristic).value;
-  const set = async (
+  // What one write request from HomeKit does: every value is handed over in one turn of the
+  // event loop.
+  const write = async (
+    service: Service,
+    ...values: Array<[WithUUID<new () => Characteristic>, number | boolean]>
+  ): Promise<void> => {
+    for (const [characteristic, to] of values) {
+      service.getCharacteristic(characteristic).setValue(to);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    await rig.fan.idle();
+  };
+  const set = (
     service: Service,
     characteristic: WithUUID<new () => Characteristic>,
     to: number | boolean,
-  ): Promise<void> => {
-    service.getCharacteristic(characteristic).setValue(to);
-    await rig.fan.idle();
-  };
+  ): Promise<void> => write(service, [characteristic, to]);
 
   it('shows the state of the fan', async () => {
     await setup();
@@ -82,6 +91,13 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
     expect(value(fanService(), C.RotationSpeed)).toBe(60);
   });
 
+  it('turns a fan that is off on for a speed that comes alone', async () => {
+    await setup({}, true);
+    await set(fanService(), C.RotationSpeed, 60);
+    expect(rig.real).toMatchObject({ power: true, level: 60 });
+    expect(value(fanService(), C.Active)).toBe(C.Active.ACTIVE);
+  });
+
   it('turns the fan off and on from HomeKit', async () => {
     await setup();
     await set(fanService(), C.Active, C.Active.INACTIVE);
@@ -98,14 +114,56 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
     expect(value(fanService(), C.Active)).toBe(C.Active.INACTIVE);
   });
 
-  it('writes once when HomeKit sends the speed and then the power for a fan that is off', async () => {
-    await setup({}, true);
-    fanService().getCharacteristic(C.RotationSpeed).setValue(70);
-    fanService().getCharacteristic(C.Active).setValue(C.Active.ACTIVE);
-    await rig.fan.idle();
-    expect(rig.real).toMatchObject({ power: true, level: 70 });
-    expect(rig.writes.filter((w) => /set_speed_level|2\/6/.test(w))).toHaveLength(1);
-    expect(rig.writes.filter((w) => w === 'set 2/1')).toEqual([]);
+  describe('the power and the speed in one write request', () => {
+    const POWER_ON: [WithUUID<new () => Characteristic>, number] = [C.Active, C.Active.ACTIVE];
+    const POWER_OFF: [WithUUID<new () => Characteristic>, number] = [C.Active, C.Active.INACTIVE];
+    const SPEED: [WithUUID<new () => Characteristic>, number] = [C.RotationSpeed, 70];
+    const speedWrites = (): string[] => rig.writes.filter((w) => /set_speed_level|2\/6/.test(w));
+
+    it.each([
+      ['the speed and then the power', [SPEED, POWER_ON]],
+      ['the power and then the speed', [POWER_ON, SPEED]],
+    ])('turn a fan that is off on at that speed with one write: %s', async (_, values) => {
+      await setup({}, true);
+      await write(fanService(), ...values);
+      expect(rig.real).toMatchObject({ power: true, level: 70 });
+      expect(speedWrites()).toHaveLength(1);
+      expect(rig.writes.filter((w) => w === 'set 2/1' || w === 'set_power')).toHaveLength(
+        name === 'zhimi.fan.za1' ? 1 : 0,
+      );
+    });
+
+    it('turn a fan that is off on at the speed it had when the speed is 0', async () => {
+      await setup({}, true);
+      await write(fanService(), POWER_ON, [C.RotationSpeed, 0]);
+      expect(rig.real).toMatchObject({ power: true, level: 25 });
+      expect(speedWrites()).toEqual([]);
+    });
+
+    it.each([
+      ['the power off and then a speed', [POWER_OFF, SPEED]],
+      ['a speed and then the power off', [SPEED, POWER_OFF]],
+    ])('leave a fan that is off alone: %s', async (_, values) => {
+      await setup({}, true);
+      await write(fanService(), ...values);
+      expect(rig.real).toMatchObject({ power: false, level: 25 });
+      expect(rig.writes).toEqual([]);
+      expect(value(fanService(), C.Active)).toBe(C.Active.INACTIVE);
+      expect(value(fanService(), C.RotationSpeed)).toBe(25);
+    });
+
+    it.each([
+      ['the power off and then a speed', [POWER_OFF, SPEED]],
+      ['a speed and then the power off', [SPEED, POWER_OFF]],
+    ])('turn a fan that is on off and do not write the speed: %s', async (_, values) => {
+      await setup();
+      await write(fanService(), ...values);
+      expect(rig.real).toMatchObject({ power: false, level: 25 });
+      expect(rig.writes).toHaveLength(1);
+      expect(speedWrites()).toEqual([]);
+      expect(value(fanService(), C.Active)).toBe(C.Active.INACTIVE);
+      expect(value(fanService(), C.RotationSpeed)).toBe(25);
+    });
   });
 
   it('does not write when HomeKit repeats the power the fan already has', async () => {
