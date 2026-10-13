@@ -11,6 +11,11 @@ export type FakeModel = 'zhimi.fan.za1' | 'dmaker.fan.p33' | 'zhimi.humidifier.c
 export const FAKE_TOKEN = '00112233445566778899aabbccddeeff';
 export const FAKE_DEVICE_ID = 0x0badf00d;
 
+// How long the client of a test waits for a reply. Long where the device answers, so that a
+// busy machine is not taken for a silent device; short where the test waits for no reply.
+export const ANSWER_TIMEOUT_MS = 2000;
+export const SILENCE_TIMEOUT_MS = 80;
+
 const md5 = (...parts: Buffer[]): Buffer => createHash('md5').update(Buffer.concat(parts)).digest();
 
 interface Request {
@@ -112,8 +117,9 @@ export class FakeDevice {
   private inFlight = 0;
   private closed = false;
 
+  // model can be changed while it runs: another device has taken the address.
   private constructor(
-    readonly model: FakeModel,
+    public model: FakeModel,
     private readonly socket: Socket,
     readonly port: number,
   ) {

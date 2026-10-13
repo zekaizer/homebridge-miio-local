@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { SILENCE_TIMEOUT_MS } from './support/fake-device';
 import { MODELS, Rig } from './support/fan-rig';
 
 // Both models are made to refuse oscillation while off; only zhimi.fan.za1 does so by itself.
@@ -56,7 +57,7 @@ describe.each(MODELS)('fan off state: %s', (name) => {
   });
 
   it('says nothing more about a command when the fan does not answer', async () => {
-    rig = await Rig.create(name);
+    rig = await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS });
     rig.atTheFan.power(false);
     await rig.started();
     rig.device.silent = true;

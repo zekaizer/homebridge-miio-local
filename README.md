@@ -59,7 +59,8 @@ npm install homebridge-miio-local-<version>.tgz
 | `buzzerAtNight`, `lightAtNight` | The value during the night. `same`, the default: the day value. With an `unmanaged` day value, the device gets back what it had before the night |
 
 A device that does not answer when Homebridge starts is asked again every 30 seconds and added
-once it answers.
+once it answers. When another model answers at the address of an accessory, that accessory is
+removed and the device is added as a new one.
 
 ## What Apple Home shows
 
@@ -79,7 +80,8 @@ range (about 18 to 22 s), and turning one on turns the other off. A move turns o
 first.
 
 A control shows its new value at once. If the fan does not take it, the control goes back to
-what the fan has. A fan that stops answering is shown as *No Response*.
+what the fan has. A fan that stops answering, or that answers three reads in a row with an
+error, is shown as *No Response*.
 
 Natural wind, the oscillation angle and the timer are not exposed. A fan in natural wind stays
 in it when the speed changes.
@@ -96,7 +98,8 @@ One accessory for the humidifier:
 | Child lock | |
 
 The temperature, the dry mode and the clean mode are not exposed. A `light` kept `on` sets the
-screen to its brightest level; a dim screen counts as on.
+screen to its brightest level; a dim screen counts as on. A dim screen that the night turned
+off therefore comes back at its brightest level, not dim.
 
 ## Device behaviour
 

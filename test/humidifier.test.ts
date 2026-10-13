@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MiioClient } from '../src/miio/client';
 import { fanModel, type HumidifierModel, humidifierModel } from '../src/models';
-import { FAKE_TOKEN, FakeDevice } from './support/fake-device';
+import { ANSWER_TIMEOUT_MS, FAKE_TOKEN, FakeDevice } from './support/fake-device';
 
 describe('zhimi.humidifier.ca4', () => {
   let device: FakeDevice;
@@ -15,7 +15,7 @@ describe('zhimi.humidifier.ca4', () => {
       address: device.address,
       port: device.port,
       token: FAKE_TOKEN,
-      timeoutMs: 80,
+      timeoutMs: ANSWER_TIMEOUT_MS,
     });
   });
 

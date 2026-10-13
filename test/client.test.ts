@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MiioClient, type MiioClientOptions } from '../src/miio/client';
-import { FAKE_TOKEN, FakeDevice, type FakeModel } from './support/fake-device';
+import {
+  ANSWER_TIMEOUT_MS,
+  FAKE_TOKEN,
+  FakeDevice,
+  type FakeModel,
+  SILENCE_TIMEOUT_MS,
+} from './support/fake-device';
 
 let device: FakeDevice;
 let client: MiioClient;
+
+const SILENCE = { timeoutMs: SILENCE_TIMEOUT_MS };
 
 async function setup(
   model: FakeModel = 'zhimi.fan.za1',
@@ -15,7 +23,7 @@ async function setup(
     address: device.address,
     port: device.port,
     token: FAKE_TOKEN,
-    timeoutMs: 80,
+    timeoutMs: ANSWER_TIMEOUT_MS,
     ...options,
   });
 }
@@ -40,7 +48,7 @@ describe('miio client', () => {
   });
 
   it('sends a request again, after a new handshake, when the reply is lost', async () => {
-    await setup();
+    await setup('zhimi.fan.za1', SILENCE);
     device.dropReplies = 1;
     await expect(client.call('get_prop', ['power'])).resolves.toEqual(['on']);
     expect(device.methods).toEqual(['get_prop', 'get_prop']);
@@ -48,7 +56,7 @@ describe('miio client', () => {
   });
 
   it('gives up on a device that does not answer at all', async () => {
-    await setup('zhimi.fan.za1', { retries: 2 });
+    await setup('zhimi.fan.za1', { ...SILENCE, retries: 2 });
     device.silent = true;
     await expect(client.call('get_prop', ['power'])).rejects.toMatchObject({
       name: 'MiioTimeoutError',
@@ -57,7 +65,7 @@ describe('miio client', () => {
   });
 
   it('tells a device that answers only the handshake apart: that is a wrong token', async () => {
-    await setup();
+    await setup('zhimi.fan.za1', SILENCE);
     device.dropRequests = true;
     await expect(client.call('get_prop', ['power'])).rejects.toMatchObject({
       name: 'MiioTimeoutError',
@@ -67,14 +75,14 @@ describe('miio client', () => {
   });
 
   it('does not take a second handshake reply for the reply to a request', async () => {
-    await setup();
+    await setup('zhimi.fan.za1', SILENCE);
     device.strayHello = 1;
     await expect(client.call('get_prop', ['power'])).resolves.toEqual(['on']);
     expect(device.methods).toEqual(['get_prop', 'get_prop']);
   });
 
   it('answers the next request after a stray handshake reply arrives late', async () => {
-    await setup();
+    await setup('zhimi.fan.za1', SILENCE);
     device.strayHello = 1;
     await client.call('get_prop', ['power']);
     await expect(client.call('get_prop', ['speed_level'])).resolves.toEqual([25]);
@@ -109,7 +117,7 @@ describe('miio client', () => {
   });
 
   it('does not send a request again when told not to', async () => {
-    await setup();
+    await setup('zhimi.fan.za1', SILENCE);
     device.dropReplies = 1;
     await expect(client.call('set_move', ['left'], { retry: false })).rejects.toMatchObject({
       name: 'MiioTimeoutError',

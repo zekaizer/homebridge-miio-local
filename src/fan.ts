@@ -18,7 +18,8 @@ const JOG_PERIOD_MS = 750;
 
 export class Fan extends Device<FanState, FanModel> {
   private readonly jogPeriodMs: number;
-  private queuedLevel?: number;
+  /** The speed write that has not started yet. */
+  private queuedLevel?: { value: number };
   private jog?: Direction;
   /** Goes up when a jog ends, so what is left of it knows. */
   private jogId = 0;
@@ -38,6 +39,9 @@ export class Fan extends Device<FanState, FanModel> {
     if (!on) {
       this.endJog();
     }
+    // A speed asked for from here on is written after this power, not with a speed write queued
+    // before it.
+    this.queuedLevel = undefined;
     this.show({ power: on });
     this.write('power', async () => {
       await this.model.setPower(this.client, on);
@@ -54,22 +58,23 @@ export class Fan extends Device<FanState, FanModel> {
     }
     this.show({ power: true, level: value });
     // A write that has not started yet takes the newest level.
-    const waiting = this.queuedLevel !== undefined;
-    this.queuedLevel = value;
-    if (waiting) {
+    if (this.queuedLevel) {
+      this.queuedLevel.value = value;
       return;
     }
-    let target = value;
+    const queued = { value };
+    this.queuedLevel = queued;
     this.write(
       'speed',
       async () => {
-        await this.model.setLevel(this.client, target, this.confirmed);
-        return { power: true, level: target };
+        await this.model.setLevel(this.client, queued.value, this.confirmed);
+        return { power: true, level: queued.value };
       },
       {
         begin: () => {
-          target = this.queuedLevel ?? target;
-          this.queuedLevel = undefined;
+          if (this.queuedLevel === queued) {
+            this.queuedLevel = undefined;
+          }
         },
       },
     );

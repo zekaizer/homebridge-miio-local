@@ -39,6 +39,8 @@ export interface DeviceSnapshot<S> {
 
 const POLL_MS = 15000;
 const ENFORCE_INTERVAL_MS = 10000;
+// Reads in a row the device answers with an error before it is shown as not responding.
+const READ_FAILURES = 3;
 const KEPT = ['buzzer', 'light'] as const;
 type KeptKey = (typeof KEPT)[number];
 const SILENT: DeviceLog = { info: () => undefined, warn: () => undefined, debug: () => undefined };
@@ -71,8 +73,10 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
   private tasks = 0;
   /** Writes queued or running. */
   private writes = 0;
-  /** Goes up when the device stops answering. A write queued before that is not sent. */
+  /** Goes up when the device is lost. A write queued before that is not sent. */
   private epoch = 0;
+  /** Reads in a row the device answered with an error. */
+  private readErrors = 0;
   private readQueued = false;
   private pollTimer?: NodeJS.Timeout;
   private stopped = false;
@@ -171,6 +175,15 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
     }
   }
 
+  /** Stops showing what was asked for and not confirmed. */
+  private forget(): void {
+    if (this.stopped || Object.keys(this.pending).length === 0) {
+      return;
+    }
+    this.pending = {};
+    this.emit();
+  }
+
   protected run(task: () => Promise<void>): void {
     this.tasks += 1;
     this.queue = this.queue
@@ -209,19 +222,18 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       } finally {
         this.writes -= 1;
       }
-      if (this.writes > 0 || this.online === false) {
+      if (this.writes > 0) {
         return;
       }
-      if (sent) {
+      if (sent && this.online !== false) {
         // A write reply carries no state. It is read back once the last queued write is done,
         // or when what keeps the device busy ends.
         if (!this.busy()) {
           await this.read();
         }
       } else {
-        // Nothing was written, so what was last read stands.
-        this.pending = {};
-        this.emit();
+        // Nothing was written, or the device is not read: what was last read stands.
+        this.forget();
       }
     });
   }
@@ -242,17 +254,29 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
   }
 
   protected async read(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
     let state: S;
     try {
       state = await this.model.read(this.client);
     } catch (error) {
-      this.failed('read', error);
+      if (error instanceof MiioTimeoutError) {
+        this.failed('read', error);
+      } else {
+        this.unreadable(error);
+      }
+      return;
+    }
+    // Stopped while the device was answering.
+    if (this.stopped) {
       return;
     }
     if (this.online === false) {
       this.log.info(`${this.noun} answers again`);
     }
     this.online = true;
+    this.readErrors = 0;
     this.confirmed = state;
     this.log.debug(`read: ${JSON.stringify(state)}`);
     // With a write still queued this reading is older than what was asked for.
@@ -281,6 +305,30 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
           : `no reply from ${this.noun}`,
       );
     }
+    this.lost();
+  }
+
+  // A read the device answered, but not with its state.
+  private unreadable(error: unknown): void {
+    if (this.stopped) {
+      return;
+    }
+    this.readErrors += 1;
+    // Said at the first one, not again on every poll while they go on.
+    if (this.readErrors === 1) {
+      this.log.warn(`read failed: ${describe(error)}`);
+    }
+    if (this.readErrors === READ_FAILURES && this.online !== false) {
+      this.log.warn(`${this.noun} cannot be read: shown as not responding`);
+      this.lost();
+    } else if (this.writes === 0) {
+      // Nothing confirms what was asked for. What the device accepted is in confirmed already.
+      this.forget();
+    }
+  }
+
+  // The device stopped answering or cannot be read: it is shown as not responding from here on.
+  private lost(): void {
     this.online = false;
     this.epoch += 1;
     // The writes that were asked for did not happen.
@@ -297,14 +345,14 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
 
   private keep(state: S): void {
     const night = this.isNight();
-    this.trackNight(state, night);
+    const back = this.trackNight(state, night);
     const off = KEPT.filter((key) => {
       const wanted = this.wanted(key, night);
       return wanted !== undefined && state[key] !== wanted;
     });
     // Not more often than enforceIntervalMs: the read after the write comes back at once, and a
     // device that refuses the value would be written to in a loop.
-    if (off.length === 0 || Date.now() - this.keptAt < this.enforceIntervalMs) {
+    if (off.length + back.length === 0 || Date.now() - this.keptAt < this.enforceIntervalMs) {
       return;
     }
     this.keptAt = Date.now();
@@ -313,11 +361,17 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
       this.log.info(`keeping the ${key} ${value ? 'on' : 'off'}`);
       this.writeKept(key, value);
     }
+    for (const [key, value] of back) {
+      this.log.info(`the night is over: putting the ${key} back ${value ? 'on' : 'off'}`);
+      this.writeKept(key, value);
+    }
   }
 
   // While it is night, remembers what the device had for each setting the night overrides and
-  // no day value would put back. Those are written back when the night ends.
-  private trackNight(state: S, night: boolean): void {
+  // no day value would put back. Returns what is to be written back now that the night is over.
+  // What was remembered is forgotten once the device has it all back, not when it is written: a
+  // write can fail.
+  private trackNight(state: S, night: boolean): Array<[KeptKey, boolean]> {
     const before = this.memory.beforeNight;
     if (night) {
       const added = KEPT.filter(
@@ -333,20 +387,22 @@ export abstract class Device<S extends DeviceState, M extends DeviceModel<S> = D
         };
         this.onMemoryChange();
       }
-      return;
+      return [];
     }
     if (!before) {
-      return;
+      return [];
     }
-    delete this.memory.beforeNight;
-    this.onMemoryChange();
-    for (const key of KEPT) {
+    const back = KEPT.flatMap((key): Array<[KeptKey, boolean]> => {
       const value = before[key];
-      if (value !== undefined && this.day[key] === 'unmanaged' && state[key] !== value) {
-        this.log.info(`the night is over: putting the ${key} back ${value ? 'on' : 'off'}`);
-        this.writeKept(key, value);
-      }
+      return value !== undefined && this.day[key] === 'unmanaged' && state[key] !== value
+        ? [[key, value]]
+        : [];
+    });
+    if (back.length === 0) {
+      delete this.memory.beforeNight;
+      this.onMemoryChange();
     }
+    return back;
   }
 
   private writeKept(key: KeptKey, value: boolean): void {

@@ -87,29 +87,34 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
     const kept = this.cached.get(uuid);
     const known = (kept?.context as Context | undefined)?.info;
     const shown = kept !== undefined && known !== undefined && supported(known.model);
-    if (shown) {
-      this.build(device, client, kept, known);
-    }
+    const running = shown ? this.build(device, client, kept, known) : undefined;
 
     // A device that is shown already says so itself when it does not answer.
     const info = await this.identify(device, client, shown);
     if (!info) {
       return;
     }
+    if (shown) {
+      if (info.model === known.model) {
+        (kept.context as Context).info = info;
+        return;
+      }
+      // Another device has the address now. What was kept is not its accessory.
+      this.log.info(`${device.name}: ${info.model} has taken the place of ${known.model}`);
+      running?.stop();
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [kept]);
+    }
     if (!supported(info.model)) {
       this.log.warn(`${device.name}: the model ${info.model} is not supported`);
       return;
     }
-    if (shown) {
-      (kept.context as Context).info = info;
-      return;
-    }
     const { Categories } = this.api.hap;
     const category = fanModel(info.model) ? Categories.FAN : Categories.AIR_HUMIDIFIER;
-    const accessory = kept ?? new this.api.platformAccessory(device.name, uuid, category);
+    const reused = shown ? undefined : kept;
+    const accessory = reused ?? new this.api.platformAccessory(device.name, uuid, category);
     (accessory.context as Context).info = info;
     this.build(device, client, accessory, info);
-    if (kept) {
+    if (reused) {
       this.api.updatePlatformAccessories([accessory]);
     } else {
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
@@ -152,12 +157,13 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
     return undefined;
   }
 
+  // Returns the device it started, or undefined for a model without support.
   private build(
     device: DeviceConfig,
     client: MiioClient,
     accessory: PlatformAccessory,
     info: DeviceInfo,
-  ): void {
+  ): { stop(): void } | undefined {
     const context = accessory.context as Context;
     context.memory ??= {};
     const options = {
@@ -189,11 +195,12 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
       started = new Humidifier(client, humidifier, options);
       new HumidifierAccessory(this.api.hap, accessory, started, { name: device.name, info });
     } else {
-      return;
+      return undefined;
     }
     this.devices.push(started);
     this.log.info(`${device.name}: ${info.model} at ${device.address}`);
     started.start();
+    return started;
   }
 
   private shutdown(): void {
@@ -209,9 +216,13 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  // Ends early at shutdown.
+  // Ends early at shutdown, and at once after it.
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => {
+      if (this.stopped) {
+        resolve();
+        return;
+      }
       const wake = (): void => {
         clearTimeout(timer);
         this.wake.delete(wake);

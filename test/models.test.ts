@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MiioClient } from '../src/miio/client';
 import { type FanModel, fanModel } from '../src/models';
-import { FAKE_TOKEN, FakeDevice, type FakeModel } from './support/fake-device';
+import {
+  ANSWER_TIMEOUT_MS,
+  FAKE_TOKEN,
+  FakeDevice,
+  type FakeModel,
+  SILENCE_TIMEOUT_MS,
+} from './support/fake-device';
 
 describe.each<FakeModel>(['zhimi.fan.za1', 'dmaker.fan.p33'])('%s', (name) => {
   let device: FakeDevice;
@@ -26,14 +32,12 @@ describe.each<FakeModel>(['zhimi.fan.za1', 'dmaker.fan.p33'])('%s', (name) => {
     },
   };
 
+  const connect = (timeoutMs = ANSWER_TIMEOUT_MS): MiioClient =>
+    new MiioClient({ address: device.address, port: device.port, token: FAKE_TOKEN, timeoutMs });
+
   beforeEach(async () => {
     device = await FakeDevice.start(name);
-    client = new MiioClient({
-      address: device.address,
-      port: device.port,
-      token: FAKE_TOKEN,
-      timeoutMs: 80,
-    });
+    client = connect();
   });
 
   afterEach(async () => {
@@ -134,6 +138,7 @@ describe.each<FakeModel>(['zhimi.fan.za1', 'dmaker.fan.p33'])('%s', (name) => {
   });
 
   it('does not send a step again when its reply is lost', async () => {
+    client = connect(SILENCE_TIMEOUT_MS);
     device.dropReplies = 1;
     await expect(fan.move(client, 'left')).rejects.toMatchObject({ name: 'MiioTimeoutError' });
     expect(device.moves).toEqual(['left']);

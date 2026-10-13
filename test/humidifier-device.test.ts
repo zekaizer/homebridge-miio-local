@@ -4,7 +4,12 @@ import type { DeviceOptions } from '../src/device';
 import { Humidifier } from '../src/humidifier';
 import { MiioClient, MiioError } from '../src/miio/client';
 import { type HumidifierModel, humidifierModel } from '../src/models';
-import { FAKE_TOKEN, FakeDevice } from './support/fake-device';
+import {
+  ANSWER_TIMEOUT_MS,
+  FAKE_TOKEN,
+  FakeDevice,
+  SILENCE_TIMEOUT_MS,
+} from './support/fake-device';
 import { Log } from './support/fan-rig';
 
 describe('humidifier', () => {
@@ -14,14 +19,14 @@ describe('humidifier', () => {
   let model: HumidifierModel;
   const log = new Log();
 
-  async function setup(options: DeviceOptions = {}): Promise<void> {
+  async function setup(options: DeviceOptions = {}, timeoutMs = ANSWER_TIMEOUT_MS): Promise<void> {
     log.lines.length = 0;
     device = await FakeDevice.start('zhimi.humidifier.ca4');
     client = new MiioClient({
       address: device.address,
       port: device.port,
       token: FAKE_TOKEN,
-      timeoutMs: 40,
+      timeoutMs,
     });
     model = { ...(humidifierModel('zhimi.humidifier.ca4') as HumidifierModel) };
     humidifier = new Humidifier(client, model, {
@@ -130,7 +135,7 @@ describe('humidifier', () => {
   });
 
   it('goes offline when the humidifier stops answering and comes back', async () => {
-    await setup();
+    await setup({}, SILENCE_TIMEOUT_MS);
     device.silent = true;
     humidifier.setPower(true);
     await humidifier.idle();

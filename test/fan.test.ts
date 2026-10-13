@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { MiioError } from '../src/miio/client';
+import { SILENCE_TIMEOUT_MS } from './support/fake-device';
 import { MODELS, Rig } from './support/fan-rig';
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe.each(MODELS)('fan: %s', (name) => {
   let rig: Rig;
@@ -74,6 +78,16 @@ describe.each(MODELS)('fan: %s', (name) => {
       expect(rig.writes).toHaveLength(1);
     });
 
+    it('ends on at a speed that is asked for after the fan was told to turn off', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.fan.setLevel(40);
+      rig.fan.setPower(false);
+      rig.fan.setLevel(20);
+      await rig.fan.idle();
+      expect(rig.real).toMatchObject({ power: true, level: 20 });
+      expect(rig.fan.snapshot.state).toMatchObject({ power: true, level: 20 });
+    });
+
     it('never shows the old speed again while a write is on its way', async () => {
       rig = await (await Rig.create(name)).started();
       rig.fan.refresh();
@@ -131,7 +145,7 @@ describe.each(MODELS)('fan: %s', (name) => {
 
   describe('a fan that stops answering', () => {
     it('goes offline, says so once, and shows the last state it read', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.silent = true;
       rig.fan.setLevel(80);
       expect(rig.fan.snapshot.state?.level).toBe(80);
@@ -143,7 +157,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('comes back online when the fan answers again', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.silent = true;
       rig.fan.refresh();
       await rig.fan.idle();
@@ -156,7 +170,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('points at the token when the fan answers the handshake only', async () => {
-      rig = await Rig.create(name);
+      rig = await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS });
       rig.device.dropRequests = true;
       await rig.started();
       expect(rig.fan.snapshot.online).toBe(false);
@@ -164,7 +178,7 @@ describe.each(MODELS)('fan: %s', (name) => {
     });
 
     it('drops the commands that were waiting, instead of timing out on each', async () => {
-      rig = await (await Rig.create(name)).started();
+      rig = await (await Rig.create(name, { timeoutMs: SILENCE_TIMEOUT_MS })).started();
       rig.device.dropRequests = true;
       const before = rig.device.hellos;
       rig.fan.setLevel(80);
@@ -174,6 +188,113 @@ describe.each(MODELS)('fan: %s', (name) => {
       // One request sent three times: first with the handshake it had, then after two new ones.
       expect(rig.device.hellos - before).toBe(2);
       expect(rig.fan.snapshot).toMatchObject({ online: false, state: { level: 25, lock: false } });
+    });
+  });
+
+  describe('a fan that is stopped while a request is on its way', () => {
+    it('reports nothing of the reply', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.device.delayMs = 20;
+      rig.atTheFan.level(80);
+      rig.fan.refresh();
+      await sleep(5);
+      const seen = rig.seen.length;
+      rig.fan.stop();
+      await sleep(60);
+      expect(rig.seen).toHaveLength(seen);
+      expect(rig.fan.snapshot.state?.level).toBe(25);
+    });
+
+    it('does not read back the write', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.device.delayMs = 20;
+      rig.fan.setLock(true);
+      await sleep(5);
+      const reads = rig.reads;
+      rig.fan.stop();
+      await sleep(80);
+      expect(rig.real.lock).toBe(true);
+      expect(rig.reads).toBe(reads);
+    });
+  });
+
+  // dmaker.fan.p33 answers -9999 to a request it cannot service.
+  describe('a fan that answers a read with an error', () => {
+    const refuse = async (): Promise<never> => {
+      throw new MiioError(-9999, 'user ack timeout');
+    };
+
+    it('shows what it last read when it refuses a value and cannot be read back', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.setPower = refuse;
+      rig.model.read = refuse;
+      rig.fan.setPower(false);
+      expect(rig.fan.snapshot.state?.power).toBe(false);
+      await rig.fan.idle();
+      expect(rig.fan.snapshot.state?.power).toBe(true);
+      expect(rig.seen.at(-1)?.state?.power).toBe(true);
+    });
+
+    it('keeps showing a value it took when it cannot be read back', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      rig.fan.setLevel(60);
+      await rig.fan.idle();
+      expect(rig.real.level).toBe(60);
+      expect(rig.fan.snapshot.state?.level).toBe(60);
+    });
+
+    const polls = async (count: number): Promise<void> => {
+      for (let i = 0; i < count; i += 1) {
+        rig.fan.refresh();
+        await rig.fan.idle();
+      }
+    };
+
+    it('is shown as not responding after three such reads in a row, and says so once', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      await polls(2);
+      expect(rig.fan.snapshot.online).toBe(true);
+      await polls(3);
+      expect(rig.fan.snapshot).toMatchObject({ online: false, state: { level: 25 } });
+      expect(rig.log.matching(/warn read failed: -9999/)).toHaveLength(1);
+      expect(rig.log.matching(/warn the fan cannot be read/)).toHaveLength(1);
+    });
+
+    it('counts from the start again after a read that works', async () => {
+      rig = await (await Rig.create(name)).started();
+      const read = rig.model.read;
+      rig.model.read = refuse;
+      await polls(2);
+      rig.model.read = read;
+      await polls(1);
+      rig.model.read = refuse;
+      await polls(2);
+      expect(rig.fan.snapshot.online).toBe(true);
+      expect(rig.log.matching(/warn read failed: -9999/)).toHaveLength(2);
+    });
+
+    it('is shown again once a read works', async () => {
+      rig = await (await Rig.create(name)).started();
+      const read = rig.model.read;
+      rig.model.read = refuse;
+      await polls(3);
+      rig.model.read = read;
+      rig.atTheFan.level(70);
+      await polls(1);
+      expect(rig.fan.snapshot).toMatchObject({ online: true, state: { level: 70 } });
+      expect(rig.log.matching(/info .*answers again/)).toHaveLength(1);
+    });
+
+    it('does not show a value it refuses while it is not responding', async () => {
+      rig = await (await Rig.create(name)).started();
+      rig.model.read = refuse;
+      await polls(3);
+      rig.model.setPower = refuse;
+      rig.fan.setPower(false);
+      await rig.fan.idle();
+      expect(rig.fan.snapshot).toMatchObject({ online: false, state: { power: true } });
     });
   });
 });

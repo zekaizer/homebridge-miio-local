@@ -100,6 +100,51 @@ describe.each(MODELS)('fan kept settings: %s', (name) => {
       expect(rig.writes.filter((w) => KEPT_WRITES.test(w))).toEqual([]);
     });
 
+    it('gives it back at the next reading when the write that gives it back fails', async () => {
+      let night = true;
+      const memory: DeviceMemory = {};
+      rig = await Rig.create(name, { lightAtNight: 'off', memory, isNight: () => night });
+      await rig.started();
+      const setLight = rig.model.setLight;
+      let refused = 0;
+      rig.model.setLight = async (client, on) => {
+        if (refused === 0) {
+          refused += 1;
+          throw new MiioError(-9999, 'user ack timeout');
+        }
+        await setLight(client, on);
+      };
+      night = false;
+      rig.fan.refresh();
+      await rig.fan.idle();
+      expect(refused).toBe(1);
+      expect(rig.real.light).toBe(true);
+      expect(memory.beforeNight).toBeUndefined();
+    });
+
+    it('does not give it back again and again to a fan that refuses the value', async () => {
+      const memory: DeviceMemory = { beforeNight: { light: true } };
+      rig = await Rig.create(name, {
+        lightAtNight: 'off',
+        memory,
+        isNight: () => false,
+        enforceIntervalMs: 60_000,
+      });
+      rig.atTheFan.light(false);
+      let attempts = 0;
+      rig.model.setLight = async () => {
+        attempts += 1;
+        throw new MiioError(-5001, 'invalid arg');
+      };
+      await rig.started();
+      rig.fan.refresh();
+      await rig.fan.idle();
+      rig.fan.refresh();
+      await rig.fan.idle();
+      expect(attempts).toBe(1);
+      expect(memory.beforeNight).toEqual({ light: true });
+    });
+
     it('leaves a change made by hand in the day alone', async () => {
       rig = await Rig.create(name, { lightAtNight: 'off', isNight: () => false });
       await rig.started();
