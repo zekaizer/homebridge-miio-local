@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist/**", "!docs/**", "!package-lock.json"]
+    "includes": ["**", "!**/dist", "!docs", "!package-lock.json"]
   },
   "formatter": {
     "enabled": true,
@@ -16,7 +16,7 @@
     "lineEnding": "lf"
   },
   "linter": {
-    "enabled": false
+    "enabled": true
   },
   "javascript": {
     "formatter": {
