@@ -236,6 +236,60 @@ describe('platform', () => {
       );
     });
 
+    it('adds the accessory anew when another fan model answers at its address', async () => {
+      const h = home();
+      const device = await FakeDevice.start('zhimi.fan.za1');
+      const accessory = await kept(h, device);
+      device.model = 'dmaker.fan.p33';
+      device.miot['2/6'] = 55;
+      h.launch({ devices: [h.entry(device, { pollInterval: 1 })] }, [accessory]);
+      await until(() => h.registered.length === 1, 'the new accessory');
+      const added = h.registered[0] as PlatformAccessory;
+      expect(h.unregistered).toEqual([accessory]);
+      expect(added).not.toBe(accessory);
+      expect(added.UUID).toBe(accessory.UUID);
+      await until(() => speed(added) === 55, 'a reading');
+      // The fan it was is no longer asked, in a dialect the new one does not speak.
+      const asked = (): number => device.methods.filter((m) => m === 'get_prop').length;
+      const before = asked();
+      await sleep(1200);
+      expect(asked()).toBe(before);
+    });
+
+    it('adds a humidifier accessory when a humidifier answers at the address of a fan', async () => {
+      const h = home();
+      const device = await FakeDevice.start('zhimi.fan.za1');
+      const accessory = await kept(h, device);
+      device.model = 'zhimi.humidifier.ca4';
+      h.launch({ devices: [h.entry(device)] }, [accessory]);
+      await until(() => h.registered.length === 1, 'the new accessory');
+      const added = h.registered[0] as PlatformAccessory;
+      expect(h.unregistered).toEqual([accessory]);
+      expect(added.category).toBe(Categories.AIR_HUMIDIFIER);
+      expect(added.getService(S.Fanv2)).toBeUndefined();
+      const service = added.getService(S.HumidifierDehumidifier);
+      await until(
+        () => service?.getCharacteristic(C.CurrentRelativeHumidity).value === 47,
+        'a reading',
+      );
+    });
+
+    it('removes it when a model it has no support for answers at its address', async () => {
+      const h = home();
+      const device = await FakeDevice.start('zhimi.fan.za1');
+      const accessory = await kept(h, device);
+      device.model = 'some.other.model' as FakeModel;
+      h.launch({ devices: [h.entry(device)] }, [accessory]);
+      await until(() => h.unregistered.length === 1, 'the removal');
+      expect(h.unregistered).toEqual([accessory]);
+      await until(
+        () =>
+          h.lines.some((line) => /warn Bedroom fan: .*some.other.model.*not supported/.test(line)),
+        'the warning',
+      );
+      expect(h.registered).toEqual([]);
+    });
+
     it('removes it when its device is no longer configured', async () => {
       const h = home();
       const device = await FakeDevice.start('dmaker.fan.p33');

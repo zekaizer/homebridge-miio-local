@@ -59,7 +59,8 @@ npm install homebridge-miio-local-<version>.tgz
 | `buzzerAtNight`, `lightAtNight` | The value during the night. `same`, the default: the day value. With an `unmanaged` day value, the device gets back what it had before the night |
 
 A device that does not answer when Homebridge starts is asked again every 30 seconds and added
-once it answers.
+once it answers. When another model answers at the address of an accessory, that accessory is
+removed and the device is added as a new one.
 
 ## What Apple Home shows
 

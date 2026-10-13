@@ -112,8 +112,9 @@ export class FakeDevice {
   private inFlight = 0;
   private closed = false;
 
+  // model can be changed while it runs: another device has taken the address.
   private constructor(
-    readonly model: FakeModel,
+    public model: FakeModel,
     private readonly socket: Socket,
     readonly port: number,
   ) {
