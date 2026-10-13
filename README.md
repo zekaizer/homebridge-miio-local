@@ -98,7 +98,8 @@ One accessory for the humidifier:
 | Child lock | |
 
 The temperature, the dry mode and the clean mode are not exposed. A `light` kept `on` sets the
-screen to its brightest level; a dim screen counts as on.
+screen to its brightest level; a dim screen counts as on. A dim screen that the night turned
+off therefore comes back at its brightest level, not dim.
 
 ## Device behaviour
 

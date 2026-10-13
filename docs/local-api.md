@@ -26,7 +26,7 @@ and natural wind was not observed.
 
 ## Requests
 
-Both models use the same packet format and encryption, described in the
+All three models use the same packet format and encryption, described in the
 [mihome binary protocol notes](https://github.com/OpenMiHome/mihome-binary-protocol/blob/master/doc/PROTOCOL.md).
 They differ in the JSON payload.
 
@@ -40,8 +40,8 @@ Legacy miio, used by `zhimi.fan.za1`:
 {"id": 2, "result": ["ok"]}
 ```
 
-miot, used by `dmaker.fan.p33`. A property is addressed by service id (`siid`) and property id
-(`piid`), written here as `siid/piid`:
+miot, used by `dmaker.fan.p33` and `zhimi.humidifier.ca4`. A property is addressed by service id
+(`siid`) and property id (`piid`), written here as `siid/piid`:
 
 ```json
 {"id": 1, "method": "get_properties", "params": [{"did": "x", "siid": 2, "piid": 1}]}
