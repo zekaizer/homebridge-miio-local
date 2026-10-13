@@ -2,7 +2,7 @@ import type { Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
 import { HomebridgeAPI } from 'homebridge/lib/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MiioLocalPlatform } from '../src/platform';
+import { MiioLocalPlatform, type Tuning } from '../src/platform';
 import { PLATFORM_NAME, PLUGIN_NAME } from '../src/settings';
 import { FAKE_TOKEN, FakeDevice, type FakeModel } from './support/fake-device';
 
@@ -44,7 +44,7 @@ class Home {
   }
 
   /** Starts the plugin as Homebridge does: cached accessories first, then the launch. */
-  launch(config: object, cached: PlatformAccessory[] = []): MiioLocalPlatform {
+  launch(config: object, cached: PlatformAccessory[] = [], tuning: Tuning = {}): MiioLocalPlatform {
     const log = Object.assign((message: string) => this.lines.push(`info ${message}`), {
       info: (message: string) => this.lines.push(`info ${message}`),
       warn: (message: string) => this.lines.push(`warn ${message}`),
@@ -55,7 +55,7 @@ class Home {
       log,
       { platform: PLATFORM_NAME, ...config } as PlatformConfig,
       this.api,
-      { timeoutMs: 40, identifyRetryMs: 20 },
+      { timeoutMs: 40, identifyRetryMs: 20, ...tuning },
     );
     for (const accessory of cached) {
       platform.configureAccessory(accessory);
@@ -272,6 +272,23 @@ describe('platform', () => {
     const before = device.requests.length;
     await sleep(1200);
     expect(device.requests).toHaveLength(before);
+  });
+
+  it('does not wait for another try once Homebridge has shut down', async () => {
+    const h = home();
+    const device = await h.device('zhimi.fan.za1');
+    device.silent = true;
+    const retryMs = 4321;
+    h.launch({ devices: [h.entry(device)] }, [], { identifyRetryMs: retryMs });
+    await sleep(10);
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      h.api.signalShutdown();
+      await sleep(30);
+      expect(timers.mock.calls.filter(([, ms]) => ms === retryMs)).toEqual([]);
+    } finally {
+      timers.mockRestore();
+    }
   });
 
   it('registers under the names in the package and the schema', () => {

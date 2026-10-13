@@ -209,9 +209,13 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  // Ends early at shutdown.
+  // Ends early at shutdown, and at once after it.
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => {
+      if (this.stopped) {
+        resolve();
+        return;
+      }
       const wake = (): void => {
         clearTimeout(timer);
         this.wake.delete(wake);
