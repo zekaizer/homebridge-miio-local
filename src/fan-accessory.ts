@@ -1,13 +1,8 @@
 import type { CharacteristicValue, HAP, PlatformAccessory, Service } from 'homebridge';
 
+import { type DeviceInfo, showInfo } from './accessory-info';
 import type { Fan, FanSnapshot } from './fan';
 import type { Direction } from './models';
-
-export interface DeviceInfo {
-  model: string;
-  firmware?: string;
-  serial?: string;
-}
 
 export interface FanAccessoryOptions {
   name: string;
@@ -37,14 +32,7 @@ export class FanAccessory {
   ) {
     const { Service: S, Characteristic: C } = hap;
 
-    const info = accessory.getService(S.AccessoryInformation) as Service;
-    info.setCharacteristic(C.Manufacturer, 'Xiaomi').setCharacteristic(C.Model, options.info.model);
-    if (options.info.serial) {
-      info.setCharacteristic(C.SerialNumber, options.info.serial);
-    }
-    if (options.info.firmware) {
-      info.setCharacteristic(C.FirmwareRevision, options.info.firmware);
-    }
+    showInfo(hap, accessory, options.info);
 
     this.service = accessory.getService(S.Fanv2) ?? accessory.addService(S.Fanv2, options.name);
     this.service.setPrimaryService(true);

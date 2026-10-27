@@ -5,11 +5,11 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from 'homebridge';
-
+import type { DeviceInfo } from './accessory-info';
 import { type Config, type DeviceConfig, endpoint, isNightAt, parseConfig } from './config';
 import type { DeviceMemory } from './device';
 import { Fan } from './fan';
-import { type DeviceInfo, FanAccessory } from './fan-accessory';
+import { FanAccessory } from './fan-accessory';
 import { Humidifier } from './humidifier';
 import { HumidifierAccessory } from './humidifier-accessory';
 import { MiioClient, MiioTimeoutError } from './miio/client';

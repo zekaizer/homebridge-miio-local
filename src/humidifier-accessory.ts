@@ -1,7 +1,7 @@
 import type { CharacteristicValue, HAP, PlatformAccessory, Service } from 'homebridge';
 
+import { type DeviceInfo, showInfo } from './accessory-info';
 import type { DeviceSnapshot } from './device';
-import type { DeviceInfo } from './fan-accessory';
 import { type Humidifier, MAX_TARGET, MIN_TARGET } from './humidifier';
 import type { HumidifierMode, HumidifierState } from './models';
 
@@ -38,14 +38,7 @@ export class HumidifierAccessory {
     const { Service: S, Characteristic: C } = hap;
     const Target = C.TargetHumidifierDehumidifierState;
 
-    const info = accessory.getService(S.AccessoryInformation) as Service;
-    info.setCharacteristic(C.Manufacturer, 'Xiaomi').setCharacteristic(C.Model, options.info.model);
-    if (options.info.serial) {
-      info.setCharacteristic(C.SerialNumber, options.info.serial);
-    }
-    if (options.info.firmware) {
-      info.setCharacteristic(C.FirmwareRevision, options.info.firmware);
-    }
+    showInfo(hap, accessory, options.info);
 
     this.service =
       accessory.getService(S.HumidifierDehumidifier) ??
