@@ -31,6 +31,7 @@ describe('config', () => {
           lightAtNight: 'same',
         },
       ],
+      leftOut: [],
     });
     expect(warnings).toEqual([]);
   });
@@ -72,6 +73,9 @@ describe('config', () => {
       ],
     });
     expect(config.devices.map((d) => d.name)).toEqual(['Good']);
+    expect(config.leftOut).toEqual([
+      { name: 'Bad token', address: '192.168.1.98', port: undefined },
+    ]);
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toMatch(/No address.*address/);
     expect(warnings[1]).toMatch(/Bad token.*32 hex/);
@@ -86,6 +90,35 @@ describe('config', () => {
       ],
     });
     expect(config.devices.map((d) => d.name)).toEqual(['One']);
+    expect(warnings[0]).toMatch(/Two.*192\.168\.1\.97/);
+  });
+
+  it('leaves out a device with a port that is not one, and says which', () => {
+    const { config, warnings } = parse({
+      devices: [0, 70000, 1.5, '12345'].map((port, index) => ({
+        name: `Fan ${index}`,
+        address: `192.168.1.${index}`,
+        token: TOKEN,
+        port,
+      })),
+    });
+    expect(config.devices).toEqual([]);
+    expect(warnings).toHaveLength(4);
+    expect(warnings[3]).toMatch(/Fan 3.*port/);
+  });
+
+  it('takes the miio port as no port', () => {
+    const { config, warnings } = parse({
+      devices: [
+        { name: 'One', address: '192.168.1.97', token: TOKEN, port: 54321 },
+        { name: 'Two', address: '192.168.1.97', token: TOKEN },
+        { name: 'Three', address: '192.168.1.97', token: TOKEN, port: 54322 },
+      ],
+    });
+    expect(config.devices.map((d) => [d.name, d.port])).toEqual([
+      ['One', undefined],
+      ['Three', 54322],
+    ]);
     expect(warnings[0]).toMatch(/Two.*192\.168\.1\.97/);
   });
 

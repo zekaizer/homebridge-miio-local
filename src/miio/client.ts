@@ -49,7 +49,7 @@ interface Reply {
   error?: { code: number; message: string };
 }
 
-const PORT = 54321;
+export const MIIO_PORT = 54321;
 // Longer than the 4 s the devices take to answer "user ack timeout".
 const TIMEOUT_MS = 6000;
 // zhimi.fan.za1 drops a packet whose stamp is 60 s stale and still accepts 30 s.
@@ -78,7 +78,7 @@ export class MiioClient {
       throw new Error('the token must be 32 hex characters');
     }
     this.address = options.address;
-    this.port = options.port ?? PORT;
+    this.port = options.port ?? MIIO_PORT;
     this.token = Buffer.from(options.token, 'hex');
     this.timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
     this.handshakeTtlMs = options.handshakeTtlMs ?? HANDSHAKE_TTL_MS;

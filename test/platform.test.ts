@@ -230,6 +230,18 @@ describe('platform', () => {
       expect(h.registered).toEqual([]);
     });
 
+    it('shows the firmware the device has now', async () => {
+      const h = home();
+      const device = await FakeDevice.start('dmaker.fan.p33');
+      const accessory = await kept(h, device);
+      device.firmware = '9.9.10';
+      h.launch({ devices: [h.entry(device)] }, [accessory]);
+      const firmware = (): unknown =>
+        accessory.getService(S.AccessoryInformation)?.getCharacteristic(C.FirmwareRevision).value;
+      await until(() => firmware() === '9.9.10', 'the firmware');
+      expect(h.updated).toContain(accessory);
+    });
+
     it('shows it as not responding when the device is gone at start', async () => {
       const h = home();
       const device = await FakeDevice.start('dmaker.fan.p33');
@@ -296,6 +308,25 @@ describe('platform', () => {
       );
       expect(h.registered).toEqual([]);
     });
+
+    it.each<[FakeModel, 'Fanv2' | 'HumidifierDehumidifier']>([
+      ['dmaker.fan.p33', 'Fanv2'],
+      ['zhimi.humidifier.ca4', 'HumidifierDehumidifier'],
+    ])(
+      'keeps a %s accessory as not responding while its entry has a bad token',
+      async (model, service) => {
+        const h = home();
+        const device = await FakeDevice.start(model);
+        const saved = h.api.platformAccessory.serialize(await kept(h, device));
+        const accessory = h.api.platformAccessory.deserialize(JSON.parse(JSON.stringify(saved)));
+        h.launch({ devices: [h.entry(device, { token: 'not-a-token' })] }, [accessory]);
+        expect(h.unregistered).toEqual([]);
+        const active = accessory.getService(S[service])?.getCharacteristic(C.Active);
+        await expect(active?.handleGetRequest()).rejects.toBe(
+          HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+        );
+      },
+    );
 
     it('removes it when its device is no longer configured', async () => {
       const h = home();

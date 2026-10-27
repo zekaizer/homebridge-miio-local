@@ -98,6 +98,14 @@ describe('humidifier accessory', () => {
     ]);
   });
 
+  it('offers only the target humidities the humidifier takes', async () => {
+    await setup();
+    const { minValue, maxValue } = service().getCharacteristic(
+      C.RelativeHumidityHumidifierThreshold,
+    ).props;
+    expect([minValue, maxValue]).toEqual([30, 80]);
+  });
+
   it('turns the humidifier on and off from HomeKit', async () => {
     await setup();
     await set(C.Active, C.Active.ACTIVE);

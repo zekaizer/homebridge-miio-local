@@ -36,13 +36,8 @@ export interface HumidifierState extends DeviceState {
   targetHumidity: number;
   /** Percent. */
   humidity: number;
-  /** Degrees Celsius. */
-  temperature: number;
   /** As the device reports it, 0-128. What the scale means was not measured. */
   waterLevel: number;
-  dry: boolean;
-  /** 0: no fault. */
-  fault: number;
   lock: boolean;
   /** Of the screen. light is whether it is anything but off. */
   brightness: Brightness;

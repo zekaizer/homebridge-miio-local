@@ -43,6 +43,7 @@ export class FakeDevice {
   delayMs = 0;
   /** How long the device takes to answer -9999; 4 s on the real ones. */
   ackTimeoutMs = 20;
+  firmware = '9.9.9';
 
   readonly requests: Array<{ method: string; params: unknown }> = [];
   readonly moves: string[] = [];
@@ -235,7 +236,12 @@ export class FakeDevice {
   private handle(method: string, params: any): Reply {
     if (method === 'miIO.info') {
       return {
-        result: { model: this.model, fw_ver: '9.9.9', mac: 'AA:BB:CC:DD:FA:CE', token: FAKE_TOKEN },
+        result: {
+          model: this.model,
+          fw_ver: this.firmware,
+          mac: 'AA:BB:CC:DD:FA:CE',
+          token: FAKE_TOKEN,
+        },
       };
     }
     if (this.model === 'zhimi.humidifier.ca4') {

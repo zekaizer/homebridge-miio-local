@@ -2,8 +2,8 @@ import { Device, type DeviceOptions } from './device';
 import type { MiioClient } from './miio/client';
 import type { HumidifierMode, HumidifierModel, HumidifierState } from './models';
 
-const MIN_TARGET = 30;
-const MAX_TARGET = 80;
+export const MIN_TARGET = 30;
+export const MAX_TARGET = 80;
 
 export class Humidifier extends Device<HumidifierState, HumidifierModel> {
   private queuedTarget?: number;
