@@ -2,7 +2,7 @@ import type { CharacteristicValue, HAP, PlatformAccessory, Service } from 'homeb
 
 import type { DeviceSnapshot } from './device';
 import type { DeviceInfo } from './fan-accessory';
-import type { Humidifier } from './humidifier';
+import { type Humidifier, MAX_TARGET, MIN_TARGET } from './humidifier';
 import type { HumidifierMode, HumidifierState } from './models';
 
 export interface HumidifierAccessoryOptions {
@@ -90,6 +90,7 @@ export class HumidifierAccessory {
       });
     this.service
       .getCharacteristic(C.RelativeHumidityHumidifierThreshold)
+      .setProps({ minValue: MIN_TARGET, maxValue: MAX_TARGET })
       .onSet((value) => this.humidifier.setTargetHumidity(value as number));
     this.service
       .getCharacteristic(C.LockPhysicalControls)
