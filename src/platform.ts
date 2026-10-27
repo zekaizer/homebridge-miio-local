@@ -5,7 +5,7 @@ import type {
   PlatformAccessory,
   PlatformConfig,
 } from 'homebridge';
-import type { DeviceInfo } from './accessory-info';
+import { type DeviceInfo, showInfo } from './accessory-info';
 import { type Config, type DeviceConfig, endpoint, isNightAt, parseConfig } from './config';
 import type { DeviceMemory } from './device';
 import { Fan } from './fan';
@@ -121,6 +121,8 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
     if (shown) {
       if (info.model === known.model) {
         (kept.context as Context).info = info;
+        showInfo(this.api.hap, kept, info);
+        this.api.updatePlatformAccessories([kept]);
         return;
       }
       // Another device has the address now. What was kept is not its accessory.

@@ -230,6 +230,18 @@ describe('platform', () => {
       expect(h.registered).toEqual([]);
     });
 
+    it('shows the firmware the device has now', async () => {
+      const h = home();
+      const device = await FakeDevice.start('dmaker.fan.p33');
+      const accessory = await kept(h, device);
+      device.firmware = '9.9.10';
+      h.launch({ devices: [h.entry(device)] }, [accessory]);
+      const firmware = (): unknown =>
+        accessory.getService(S.AccessoryInformation)?.getCharacteristic(C.FirmwareRevision).value;
+      await until(() => firmware() === '9.9.10', 'the firmware');
+      expect(h.updated).toContain(accessory);
+    });
+
     it('shows it as not responding when the device is gone at start', async () => {
       const h = home();
       const device = await FakeDevice.start('dmaker.fan.p33');
