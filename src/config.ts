@@ -1,4 +1,5 @@
 import type { AtNight, Kept } from './device';
+import { MIIO_PORT } from './miio/client';
 
 /** Local time, "HH:MM". The night runs from start to end, across midnight when end is earlier. */
 export interface NightSchedule {
@@ -9,7 +10,7 @@ export interface NightSchedule {
 export interface DeviceConfig {
   name: string;
   address: string;
-  /** For a device that is not on the miio port, 54321. */
+  /** For a device that is not on the miio port. Never MIIO_PORT. */
   port?: number;
   token: string;
   pollMs?: number;
@@ -52,7 +53,14 @@ export function parseConfig(raw: unknown, warn: (message: string) => void): Conf
       warn(`${name}: left out, the token must be 32 hex characters`);
       return;
     }
-    const port = typeof entry.port === 'number' ? entry.port : undefined;
+    const port = entry.port === MIIO_PORT ? undefined : entry.port;
+    if (
+      port !== undefined &&
+      (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)
+    ) {
+      warn(`${name}: left out, the port must be a whole number from 1 to 65535`);
+      return;
+    }
     if (devices.some((device) => endpoint(device) === endpoint({ address, port }))) {
       warn(`${name}: left out, ${address} is already used by another device`);
       return;

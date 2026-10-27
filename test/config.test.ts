@@ -89,6 +89,35 @@ describe('config', () => {
     expect(warnings[0]).toMatch(/Two.*192\.168\.1\.97/);
   });
 
+  it('leaves out a device with a port that is not one, and says which', () => {
+    const { config, warnings } = parse({
+      devices: [0, 70000, 1.5, '12345'].map((port, index) => ({
+        name: `Fan ${index}`,
+        address: `192.168.1.${index}`,
+        token: TOKEN,
+        port,
+      })),
+    });
+    expect(config.devices).toEqual([]);
+    expect(warnings).toHaveLength(4);
+    expect(warnings[3]).toMatch(/Fan 3.*port/);
+  });
+
+  it('takes the miio port as no port', () => {
+    const { config, warnings } = parse({
+      devices: [
+        { name: 'One', address: '192.168.1.97', token: TOKEN, port: 54321 },
+        { name: 'Two', address: '192.168.1.97', token: TOKEN },
+        { name: 'Three', address: '192.168.1.97', token: TOKEN, port: 54322 },
+      ],
+    });
+    expect(config.devices.map((d) => [d.name, d.port])).toEqual([
+      ['One', undefined],
+      ['Three', 54322],
+    ]);
+    expect(warnings[0]).toMatch(/Two.*192\.168\.1\.97/);
+  });
+
   it('falls back to the default for a value it does not know', () => {
     const { config, warnings } = parse({
       devices: [
