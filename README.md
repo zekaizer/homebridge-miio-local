@@ -60,7 +60,8 @@ npm install homebridge-miio-local-<version>.tgz
 
 A device that does not answer when Homebridge starts is asked again every 30 seconds and added
 once it answers. When another model answers at the address of an accessory, that accessory is
-removed and the device is added as a new one.
+removed and the device is added as a new one. An accessory whose device is left out of the
+configuration for a bad token stays in HomeKit, shown as not responding, until the token is fixed.
 
 ## What Apple Home shows
 

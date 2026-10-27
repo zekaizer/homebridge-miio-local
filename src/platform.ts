@@ -60,18 +60,42 @@ export class MiioLocalPlatform implements DynamicPlatformPlugin {
   private launch(): void {
     const configured = new Set<string>();
     for (const device of this.config.devices) {
-      // The address identifies the accessory: a device that gets another address is a new one.
-      const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${endpoint(device)}`);
+      const uuid = this.uuid(device);
       configured.add(uuid);
       this.setUp(device, uuid).catch((error) =>
         this.log.error(`${device.name}: could not be set up: ${String(error)}`),
       );
+    }
+    // Removing the accessory would take its room, scenes and automations in HomeKit with it.
+    for (const device of this.config.leftOut) {
+      const uuid = this.uuid(device);
+      configured.add(uuid);
+      const accessory = this.cached.get(uuid);
+      if (accessory) {
+        this.log.warn(`${device.name}: shown as not responding until its entry is fixed`);
+        this.showNotResponding(accessory);
+      }
     }
     const gone = [...this.cached.values()].filter((accessory) => !configured.has(accessory.UUID));
     if (gone.length > 0) {
       this.log.info(`removing ${gone.map((accessory) => accessory.displayName).join(', ')}`);
       this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, gone);
     }
+  }
+
+  // The address identifies the accessory: a device that gets another address is a new one.
+  private uuid(device: Pick<DeviceConfig, 'address' | 'port'>): string {
+    return this.api.hap.uuid.generate(`${PLUGIN_NAME}:${endpoint(device)}`);
+  }
+
+  private showNotResponding(accessory: PlatformAccessory): void {
+    const { HapStatusError, HAPStatus, Characteristic: C } = this.api.hap;
+    accessory.services
+      .find((service) => service.isPrimaryService)
+      ?.getCharacteristic(C.Active)
+      .onGet(() => {
+        throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      });
   }
 
   private async setUp(device: DeviceConfig, uuid: string): Promise<void> {

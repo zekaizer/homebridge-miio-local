@@ -28,6 +28,8 @@ export const endpoint = (device: Pick<DeviceConfig, 'address' | 'port'>): string
 export interface Config {
   night?: NightSchedule;
   devices: DeviceConfig[];
+  /** Devices left out for a value that is not their address or port: what identifies them. */
+  leftOut: Array<Pick<DeviceConfig, 'name' | 'address' | 'port'>>;
 }
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -40,6 +42,7 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
 export function parseConfig(raw: unknown, warn: (message: string) => void): Config {
   const config = (raw ?? {}) as { night?: unknown; devices?: unknown };
   const devices: DeviceConfig[] = [];
+  const leftOut: Config['leftOut'] = [];
   const list = Array.isArray(config.devices) ? config.devices : [];
   list.forEach((entry: Record<string, unknown>, index: number) => {
     const name = text(entry?.name) || `Device ${index + 1}`;
@@ -49,16 +52,17 @@ export function parseConfig(raw: unknown, warn: (message: string) => void): Conf
       warn(`${name}: left out, it has no address`);
       return;
     }
-    if (!/^[0-9a-fA-F]{32}$/.test(token)) {
-      warn(`${name}: left out, the token must be 32 hex characters`);
-      return;
-    }
     const port = entry.port === MIIO_PORT ? undefined : entry.port;
     if (
       port !== undefined &&
       (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)
     ) {
       warn(`${name}: left out, the port must be a whole number from 1 to 65535`);
+      return;
+    }
+    if (!/^[0-9a-fA-F]{32}$/.test(token)) {
+      warn(`${name}: left out, the token must be 32 hex characters`);
+      leftOut.push({ name, address, port });
       return;
     }
     if (devices.some((device) => endpoint(device) === endpoint({ address, port }))) {
@@ -94,7 +98,7 @@ export function parseConfig(raw: unknown, warn: (message: string) => void): Conf
       lightAtNight: oneOf('lightAtNight', AT_NIGHT, 'same'),
     });
   });
-  return { night: parseNight(config.night, warn), devices };
+  return { night: parseNight(config.night, warn), devices, leftOut };
 }
 
 function parseNight(raw: unknown, warn: (message: string) => void): NightSchedule | undefined {

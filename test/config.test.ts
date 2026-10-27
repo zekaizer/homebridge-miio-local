@@ -31,6 +31,7 @@ describe('config', () => {
           lightAtNight: 'same',
         },
       ],
+      leftOut: [],
     });
     expect(warnings).toEqual([]);
   });
@@ -72,6 +73,9 @@ describe('config', () => {
       ],
     });
     expect(config.devices.map((d) => d.name)).toEqual(['Good']);
+    expect(config.leftOut).toEqual([
+      { name: 'Bad token', address: '192.168.1.98', port: undefined },
+    ]);
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toMatch(/No address.*address/);
     expect(warnings[1]).toMatch(/Bad token.*32 hex/);
