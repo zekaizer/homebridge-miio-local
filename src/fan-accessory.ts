@@ -79,8 +79,11 @@ export class FanAccessory {
         continue;
       }
       const service = existing ?? accessory.addService(S.Switch, name, subtype);
-      // The Home app shows the services of one accessory by this name, not by Name.
-      service.addOptionalCharacteristic(C.ConfiguredName);
+      // The Home app shows the services of one accessory by this name, not by Name. Added once:
+      // what is added is kept with the accessory.
+      if (!service.testCharacteristic(C.ConfiguredName)) {
+        service.addCharacteristic(C.ConfiguredName);
+      }
       service.setCharacteristic(C.ConfiguredName, name);
       service.updateCharacteristic(C.On, false);
       service.getCharacteristic(C.On).onSet((value) => {

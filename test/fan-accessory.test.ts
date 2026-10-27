@@ -269,6 +269,14 @@ describe.each(MODELS)('fan accessory: %s', (name) => {
       expect(rig.device.moves).toEqual([]);
     });
 
+    it('leave the accessory Homebridge keeps the same from one start to the next', async () => {
+      await setup({ moveSwitches: true });
+      const saved = JSON.stringify(api.platformAccessory.serialize(accessory));
+      accessory = api.platformAccessory.deserialize(JSON.parse(saved));
+      attach({ moveSwitches: true });
+      expect(JSON.stringify(api.platformAccessory.serialize(accessory))).toBe(saved);
+    });
+
     it('are removed from an accessory that had them once the option is off', async () => {
       await setup({ moveSwitches: true });
       expect(moveSwitch('left')).toBeDefined();
