@@ -5,12 +5,9 @@ import type { Brightness, HumidifierMode, HumidifierModel, HumidifierState } fro
 // in the same request fail.
 const PROPS = {
   power: [2, 1],
-  fault: [2, 2],
   mode: [2, 5],
   targetHumidity: [2, 6],
   waterLevel: [2, 7],
-  dry: [2, 8],
-  temperature: [3, 7],
   humidity: [3, 9],
   buzzer: [4, 1],
   brightness: [5, 2],
@@ -44,10 +41,7 @@ export const zhimiHumidifierCa4: HumidifierModel = {
       mode: named('mode', MODES, p.mode),
       targetHumidity: Number(p.targetHumidity),
       humidity: Number(p.humidity),
-      temperature: Number(p.temperature),
       waterLevel: Number(p.waterLevel),
-      dry: p.dry === true,
-      fault: Number(p.fault),
       lock: p.lock === true,
       buzzer: p.buzzer === true,
       light: brightness !== 'off',
